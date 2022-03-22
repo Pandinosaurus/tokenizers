@@ -11,7 +11,6 @@
 
 use std::{
     collections::HashMap,
-    fmt,
     fs::{read_to_string, File},
     io::prelude::*,
     io::BufReader,
@@ -22,7 +21,6 @@ use std::{
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::from_pretrained::{from_pretrained, FromPretrainedParameters};
 use crate::utils::iter::ResultShunt;
 use crate::utils::parallelism::*;
 use crate::utils::progress::{ProgressBar, ProgressStyle};
@@ -43,7 +41,9 @@ pub use crate::processors::PostProcessorWrapper;
 // And some other types
 pub use crate::utils::iter::LinesWithEnding;
 pub use crate::utils::padding::{pad_encodings, PaddingDirection, PaddingParams, PaddingStrategy};
-pub use crate::utils::truncation::{truncate_encodings, TruncationParams, TruncationStrategy};
+pub use crate::utils::truncation::{
+    truncate_encodings, TruncationDirection, TruncationParams, TruncationStrategy,
+};
 pub use added_vocabulary::*;
 pub use encoding::*;
 pub use normalizer::{NormalizedString, OffsetReferential, SplitDelimiterBehavior};
@@ -119,9 +119,9 @@ impl dyn PostProcessor {
     }
 }
 
-/// A `Decoder` has the responsibility to merge the given `Vec<String>` in a `String`.
+/// A `Decoder` changes the raw tokens into its more readable form.
 pub trait Decoder {
-    fn decode(&self, tokens: Vec<String>) -> Result<String>;
+    fn decode(&self, tokens: Vec<String>) -> Result<Vec<String>>;
 }
 
 /// A `Trainer` has the responsibility to train a model. We feed it with lines/sentences
@@ -150,7 +150,7 @@ pub struct Token {
 }
 impl Token {
     pub fn new(id: u32, value: String, offsets: (usize, usize)) -> Self {
-        Token { id, value, offsets }
+        Self { id, value, offsets }
     }
 }
 
@@ -165,55 +165,55 @@ pub enum InputSequence<'s> {
 
 impl<'s> From<Cow<'s, str>> for InputSequence<'s> {
     fn from(input: Cow<'s, str>) -> Self {
-        InputSequence::Raw(input)
+        Self::Raw(input)
     }
 }
 
 impl<'s> From<&'s str> for InputSequence<'s> {
     fn from(input: &'s str) -> Self {
-        InputSequence::Raw(Cow::Borrowed(input))
+        Self::Raw(Cow::Borrowed(input))
     }
 }
 
 impl From<String> for InputSequence<'_> {
     fn from(input: String) -> Self {
-        InputSequence::Raw(Cow::Owned(input))
+        Self::Raw(Cow::Owned(input))
     }
 }
 
 impl<'s> From<&'s [&'s str]> for InputSequence<'s> {
     fn from(input: &'s [&'s str]) -> Self {
-        InputSequence::PreTokenized(Cow::Borrowed(input))
+        Self::PreTokenized(Cow::Borrowed(input))
     }
 }
 
 impl<'s> From<Vec<&'s str>> for InputSequence<'s> {
     fn from(input: Vec<&'s str>) -> Self {
-        InputSequence::PreTokenized(Cow::Owned(input))
+        Self::PreTokenized(Cow::Owned(input))
     }
 }
 
 impl<'s> From<&'s [String]> for InputSequence<'s> {
     fn from(input: &'s [String]) -> Self {
-        InputSequence::PreTokenizedOwned(Cow::Borrowed(input))
+        Self::PreTokenizedOwned(Cow::Borrowed(input))
     }
 }
 
 impl<'s> From<Vec<String>> for InputSequence<'s> {
     fn from(input: Vec<String>) -> Self {
-        InputSequence::PreTokenizedOwned(Cow::Owned(input))
+        Self::PreTokenizedOwned(Cow::Owned(input))
     }
 }
 
 impl<'s> From<Vec<Cow<'s, str>>> for InputSequence<'s> {
     fn from(input: Vec<Cow<'s, str>>) -> Self {
-        InputSequence::PreTokenizedCow(Cow::Owned(input))
+        Self::PreTokenizedCow(Cow::Owned(input))
     }
 }
 
 impl<'s> From<&'s [Cow<'s, str>]> for InputSequence<'s> {
     fn from(input: &'s [Cow<'s, str>]) -> Self {
-        InputSequence::PreTokenizedCow(Cow::Borrowed(input))
+        Self::PreTokenizedCow(Cow::Borrowed(input))
     }
 }
 
@@ -225,7 +225,7 @@ pub enum EncodeInput<'s> {
 
 impl<'s, I: Into<InputSequence<'s>>> From<I> for EncodeInput<'s> {
     fn from(input: I) -> Self {
-        EncodeInput::Single(input.into())
+        Self::Single(input.into())
     }
 }
 
@@ -235,20 +235,13 @@ where
     I2: Into<InputSequence<'s>>,
 {
     fn from(input: (I1, I2)) -> Self {
-        EncodeInput::Dual(input.0.into(), input.1.into())
+        Self::Dual(input.0.into(), input.1.into())
     }
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
+#[error("{0}")]
 pub struct BuilderError(String);
-
-impl std::error::Error for BuilderError {}
-
-impl fmt::Display for BuilderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 /// Builder for Tokenizer structs.
 ///
@@ -289,7 +282,7 @@ where
 {
     /// Get an empty TokenizerBuilder.
     pub fn new() -> Self {
-        TokenizerBuilder {
+        Self {
             model: None,
             normalizer: None,
             pre_tokenizer: None,
@@ -322,42 +315,49 @@ where
     }
 
     /// Set the model.
+    #[must_use]
     pub fn with_model(mut self, model: M) -> Self {
         self.model = Some(model);
         self
     }
 
     /// Set the normalizer.
+    #[must_use]
     pub fn with_normalizer(mut self, normalizer: Option<N>) -> Self {
         self.normalizer = normalizer;
         self
     }
 
     /// Set the pre-tokenizer.
+    #[must_use]
     pub fn with_pre_tokenizer(mut self, pretokenizer: Option<PT>) -> Self {
         self.pre_tokenizer = pretokenizer;
         self
     }
 
     /// Set the post-processor.
+    #[must_use]
     pub fn with_post_processor(mut self, post_processor: Option<PP>) -> Self {
         self.post_processor = post_processor;
         self
     }
 
     /// Set the decoder.
+    #[must_use]
     pub fn with_decoder(mut self, decoder: Option<D>) -> Self {
         self.decoder = decoder;
         self
     }
 
     /// Set the trunaction parameters.
+    #[must_use]
     pub fn with_truncation(mut self, trunc: Option<TruncationParams>) -> Self {
         self.truncation = trunc;
         self
     }
 
     /// Set the padding parameters.
+    #[must_use]
     pub fn with_padding(mut self, padding: Option<PaddingParams>) -> Self {
         self.padding = padding;
         self
@@ -395,13 +395,15 @@ impl Tokenizer {
     }
     pub fn from_file<P: AsRef<Path>>(file: P) -> Result<Self> {
         let content = read_to_string(file)?;
-        Ok(serde_json::from_str(&content)?)
+        let tokenizer = serde_json::from_str(&content)?;
+        Ok(tokenizer)
     }
+    #[cfg(feature = "http")]
     pub fn from_pretrained<S: AsRef<str>>(
         identifier: S,
-        params: Option<FromPretrainedParameters>,
+        params: Option<crate::utils::from_pretrained::FromPretrainedParameters>,
     ) -> Result<Self> {
-        let tokenizer_file = from_pretrained(identifier, params)?;
+        let tokenizer_file = crate::utils::from_pretrained::from_pretrained(identifier, params)?;
         Tokenizer::from_file(tokenizer_file)
     }
 }
@@ -484,7 +486,7 @@ where
 {
     /// Instantiate a new Tokenizer, with the given Model
     pub fn new(model: M) -> Self {
-        TokenizerImpl {
+        Self {
             normalizer: None,
             pre_tokenizer: None,
             model,
@@ -767,7 +769,8 @@ where
             .collect::<Vec<_>>();
 
         if let Some(decoder) = &self.decoder {
-            decoder.decode(tokens)
+            let tokens = decoder.decode(tokens)?;
+            Ok(tokens.join(""))
         } else {
             Ok(tokens.join(" "))
         }
@@ -1122,7 +1125,8 @@ where
     /// Instantiate a new Tokenizer from the given file
     pub fn from_file<P: AsRef<Path>>(file: P) -> Result<Self> {
         let content = read_to_string(file)?;
-        Ok(serde_json::from_str(&content)?)
+        let tokenizer = serde_json::from_str(&content)?;
+        Ok(tokenizer)
     }
 }
 
@@ -1134,13 +1138,14 @@ where
     PP: DeserializeOwned + PostProcessor,
     D: DeserializeOwned + Decoder,
 {
+    #[cfg(feature = "http")]
     /// Instantiate a new Tokenizer from a file hosted on the Hugging Face Hub.
     /// It expects the `identifier` of a model that includes a `tokenizer.json` file.
     pub fn from_pretrained<S: AsRef<str>>(
         identifier: S,
-        params: Option<FromPretrainedParameters>,
+        params: Option<crate::utils::from_pretrained::FromPretrainedParameters>,
     ) -> Result<Self> {
-        let tokenizer_file = from_pretrained(identifier, params)?;
+        let tokenizer_file = crate::utils::from_pretrained::from_pretrained(identifier, params)?;
         TokenizerImpl::from_file(tokenizer_file)
     }
 }

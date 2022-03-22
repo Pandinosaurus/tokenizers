@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::tokenizer::{Decoder, PreTokenizedString, PreTokenizer, Result, SplitDelimiterBehavior};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 /// Replaces all the whitespaces by the provided meta character and then
 /// splits on this character
-#[serde(tag = "type", from = "MetaspaceDeserializer")]
+#[serde(tag = "type")]
 pub struct Metaspace {
     replacement: char,
     pub add_prefix_space: bool,
@@ -13,17 +13,28 @@ pub struct Metaspace {
     str_rep: String,
 }
 
-#[doc(hidden)]
-#[derive(Deserialize)]
-#[serde(tag = "type")]
-pub struct MetaspaceDeserializer {
-    replacement: char,
-    add_prefix_space: bool,
-}
+impl<'de> Deserialize<'de> for Metaspace {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        enum Type {
+            Metaspace,
+        }
 
-impl From<MetaspaceDeserializer> for Metaspace {
-    fn from(v: MetaspaceDeserializer) -> Metaspace {
-        Metaspace::new(v.replacement, v.add_prefix_space)
+        #[derive(Deserialize)]
+        pub struct MetaspaceHelper {
+            #[serde(rename = "type")]
+            _type: Type,
+            replacement: char,
+            pub add_prefix_space: bool,
+            #[serde(skip, rename = "str_rep")]
+            _str_rep: String,
+        }
+
+        let helper = MetaspaceHelper::deserialize(deserializer)?;
+        Ok(Self::new(helper.replacement, helper.add_prefix_space))
     }
 }
 
@@ -66,23 +77,27 @@ impl PreTokenizer for Metaspace {
 }
 
 impl Decoder for Metaspace {
-    fn decode(&self, tokens: Vec<String>) -> Result<String> {
+    fn decode(&self, tokens: Vec<String>) -> Result<Vec<String>> {
         Ok(tokens
             .iter()
-            .flat_map(|t| t.chars())
             .enumerate()
-            .filter_map(|(i, c)| {
-                if c == self.replacement {
-                    if i == 0 && self.add_prefix_space {
-                        None
-                    } else {
-                        Some(' ')
-                    }
-                } else {
-                    Some(c)
-                }
+            .map(|(i, token)| {
+                token
+                    .chars()
+                    .flat_map(|c| {
+                        if c == self.replacement {
+                            if i == 0 && self.add_prefix_space {
+                                None
+                            } else {
+                                Some(' ')
+                            }
+                        } else {
+                            Some(c)
+                        }
+                    })
+                    .collect::<String>()
             })
-            .collect::<String>())
+            .collect())
     }
 }
 
@@ -109,6 +124,12 @@ mod tests {
             serde_json::from_str::<Metaspace>(metaspace_s).unwrap(),
             metaspace
         );
+
+        let metaspace_parsed: Metaspace = serde_json::from_str(
+            r#"{"type":"Metaspace","replacement":"_","add_prefix_space":true}"#,
+        )
+        .unwrap();
+        assert_eq!(metaspace_parsed, metaspace);
     }
 
     #[test]
@@ -173,6 +194,6 @@ mod tests {
         let res = decoder
             .decode(vec!["▁Hey".into(), "▁friend!".into()])
             .unwrap();
-        assert_eq!(&res, "Hey friend!")
+        assert_eq!(res, vec!["Hey", " friend!"])
     }
 }

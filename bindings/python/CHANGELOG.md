@@ -4,12 +4,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.6]
+
+- [#919] Fixing single_word AddedToken. (regression from 0.11.2)
+- [#916] Deserializing faster `added_tokens` by loading them in batch.
+
+## [0.11.5]
+
+- [#895] Build `python 3.10` wheels.
+
+## [0.11.4]
+
+- [#884] Fixing bad deserialization following inclusion of a default for Punctuation
+
+## [0.11.3]
+
+- [#882] Fixing Punctuation deserialize without argument.
+- [#868] Fixing missing direction in TruncationParams
+- [#860] Adding TruncationSide to TruncationParams
+
 ## [0.11.0]
+
+### Fixed
+
+- [#585] Conda version should now work on old CentOS
+- [#844] Fixing interaction between `is_pretokenized` and `trim_offsets`.
+- [#851] Doc links
 
 ### Added
 - [#657]: Add SplitDelimiterBehavior customization to Punctuation constructor
+- [#845]: Documentation for `Decoders`.
 
 ### Changed
+- [#850]: Added a feature gate to enable disabling `http` features
 - [#718]: Fix `WordLevel` tokenizer determinism during training
 - [#762]: Add a way to specify the unknown token in `SentencePieceUnigramTokenizer`
 - [#770]: Improved documentation for `UnigramTrainer`
@@ -333,6 +360,18 @@ delimiter (Works like `.split(delimiter)`)
 - Fix a bug that was causing crashes in Python 3.5
 
 
+[#919]: https://github.com/huggingface/tokenizers/pull/919
+[#916]: https://github.com/huggingface/tokenizers/pull/916
+[#895]: https://github.com/huggingface/tokenizers/pull/895
+[#884]: https://github.com/huggingface/tokenizers/pull/884
+[#882]: https://github.com/huggingface/tokenizers/pull/882
+[#868]: https://github.com/huggingface/tokenizers/pull/868
+[#860]: https://github.com/huggingface/tokenizers/pull/860
+[#850]: https://github.com/huggingface/tokenizers/pull/850
+[#844]: https://github.com/huggingface/tokenizers/pull/844
+[#845]: https://github.com/huggingface/tokenizers/pull/845
+[#851]: https://github.com/huggingface/tokenizers/pull/851
+[#585]: https://github.com/huggingface/tokenizers/pull/585
 [#793]: https://github.com/huggingface/tokenizers/pull/793
 [#780]: https://github.com/huggingface/tokenizers/pull/780
 [#770]: https://github.com/huggingface/tokenizers/pull/770

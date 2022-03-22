@@ -23,7 +23,7 @@ use crate::pre_tokenizers::unicode_scripts::UnicodeScripts;
 use crate::pre_tokenizers::whitespace::{Whitespace, WhitespaceSplit};
 use crate::{PreTokenizedString, PreTokenizer};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum PreTokenizerWrapper {
     BertPreTokenizer(BertPreTokenizer),
@@ -42,17 +42,17 @@ pub enum PreTokenizerWrapper {
 impl PreTokenizer for PreTokenizerWrapper {
     fn pre_tokenize(&self, normalized: &mut PreTokenizedString) -> crate::Result<()> {
         match self {
-            PreTokenizerWrapper::BertPreTokenizer(bpt) => bpt.pre_tokenize(normalized),
-            PreTokenizerWrapper::ByteLevel(bpt) => bpt.pre_tokenize(normalized),
-            PreTokenizerWrapper::Delimiter(dpt) => dpt.pre_tokenize(normalized),
-            PreTokenizerWrapper::Metaspace(mspt) => mspt.pre_tokenize(normalized),
-            PreTokenizerWrapper::Whitespace(wspt) => wspt.pre_tokenize(normalized),
-            PreTokenizerWrapper::Punctuation(tok) => tok.pre_tokenize(normalized),
-            PreTokenizerWrapper::Sequence(tok) => tok.pre_tokenize(normalized),
-            PreTokenizerWrapper::Split(tok) => tok.pre_tokenize(normalized),
-            PreTokenizerWrapper::WhitespaceSplit(wspt) => wspt.pre_tokenize(normalized),
-            PreTokenizerWrapper::Digits(wspt) => wspt.pre_tokenize(normalized),
-            PreTokenizerWrapper::UnicodeScripts(us) => us.pre_tokenize(normalized),
+            Self::BertPreTokenizer(bpt) => bpt.pre_tokenize(normalized),
+            Self::ByteLevel(bpt) => bpt.pre_tokenize(normalized),
+            Self::Delimiter(dpt) => dpt.pre_tokenize(normalized),
+            Self::Metaspace(mspt) => mspt.pre_tokenize(normalized),
+            Self::Whitespace(wspt) => wspt.pre_tokenize(normalized),
+            Self::Punctuation(tok) => tok.pre_tokenize(normalized),
+            Self::Sequence(tok) => tok.pre_tokenize(normalized),
+            Self::Split(tok) => tok.pre_tokenize(normalized),
+            Self::WhitespaceSplit(wspt) => wspt.pre_tokenize(normalized),
+            Self::Digits(wspt) => wspt.pre_tokenize(normalized),
+            Self::UnicodeScripts(us) => us.pre_tokenize(normalized),
         }
     }
 }
@@ -68,3 +68,51 @@ impl_enum_from!(Metaspace, PreTokenizerWrapper, Metaspace);
 impl_enum_from!(WhitespaceSplit, PreTokenizerWrapper, WhitespaceSplit);
 impl_enum_from!(Digits, PreTokenizerWrapper, Digits);
 impl_enum_from!(UnicodeScripts, PreTokenizerWrapper, UnicodeScripts);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserialize() {
+        let pre_tokenizer: PreTokenizerWrapper = serde_json::from_str(r#"{"type":"Sequence","pretokenizers":[{"type":"WhitespaceSplit"},{"type":"Metaspace","replacement":"▁","str_rep":"▁","add_prefix_space":true}]}"#).unwrap();
+
+        assert_eq!(
+            pre_tokenizer,
+            PreTokenizerWrapper::Sequence(Sequence::new(vec![
+                PreTokenizerWrapper::WhitespaceSplit(WhitespaceSplit {}),
+                PreTokenizerWrapper::Metaspace(Metaspace::new('▁', true))
+            ]))
+        );
+
+        let pre_tokenizer: PreTokenizerWrapper = serde_json::from_str(
+            r#"{"type":"Metaspace","replacement":"▁","add_prefix_space":true}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            pre_tokenizer,
+            PreTokenizerWrapper::Metaspace(Metaspace::new('▁', true))
+        );
+
+        let pre_tokenizer: PreTokenizerWrapper = serde_json::from_str(r#"{"type":"Sequence","pretokenizers":[{"type":"WhitespaceSplit"},{"type":"Metaspace","replacement":"▁","add_prefix_space":true}]}"#).unwrap();
+
+        assert_eq!(
+            pre_tokenizer,
+            PreTokenizerWrapper::Sequence(Sequence::new(vec![
+                PreTokenizerWrapper::WhitespaceSplit(WhitespaceSplit {}),
+                PreTokenizerWrapper::Metaspace(Metaspace::new('▁', true))
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_deserialize_whitespace_split() {
+        let pre_tokenizer: PreTokenizerWrapper =
+            serde_json::from_str(r#"{"type":"WhitespaceSplit"}"#).unwrap();
+        assert_eq!(
+            pre_tokenizer,
+            PreTokenizerWrapper::WhitespaceSplit(WhitespaceSplit {})
+        );
+    }
+}

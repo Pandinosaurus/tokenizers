@@ -1,16 +1,22 @@
 use serde::{Deserialize, Serialize};
 
 use crate::tokenizer::{PreTokenizedString, PreTokenizer, Result, SplitDelimiterBehavior};
+use crate::utils::macro_rules_attribute;
 use unicode_categories::UnicodeCategories;
 
 fn is_punc(x: char) -> bool {
     char::is_ascii_punctuation(&x) || x.is_punctuation()
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
-#[serde(tag = "type")]
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[macro_rules_attribute(impl_serde_type!)]
 pub struct Punctuation {
+    #[serde(default = "default_split")]
     behavior: SplitDelimiterBehavior,
+}
+
+fn default_split() -> SplitDelimiterBehavior {
+    SplitDelimiterBehavior::Isolated
 }
 
 impl Punctuation {
@@ -56,5 +62,22 @@ mod tests {
                 ("?", (29, 30)),
             ]
         );
+    }
+
+    #[test]
+    fn deserialization() {
+        let punctuation: Punctuation = serde_json::from_str(r#"{"type": "Punctuation"}"#).unwrap();
+        assert_eq!(punctuation, Punctuation::default());
+        assert_eq!(
+            punctuation,
+            Punctuation::new(SplitDelimiterBehavior::Isolated)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn deserialization_erroneous() {
+        let _punctuation: Punctuation =
+            serde_json::from_str(r#"{"type": "WhitespaceSplit"}"#).unwrap();
     }
 }

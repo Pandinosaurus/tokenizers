@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::tokenizer::{PreTokenizedString, PreTokenizer, Result, SplitDelimiterBehavior};
+use crate::utils::macro_rules_attribute;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 /// Pre tokenizes the numbers into single tokens. If individual_digits is set
 /// to true, then all digits are splitted into individual tokens.
-#[serde(tag = "type")]
 #[non_exhaustive]
+#[macro_rules_attribute(impl_serde_type!)]
 pub struct Digits {
     pub individual_digits: bool,
 }

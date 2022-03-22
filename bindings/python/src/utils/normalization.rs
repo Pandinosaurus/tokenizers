@@ -174,13 +174,13 @@ fn slice(
 ) -> PyResult<Option<PyNormalizedString>> {
     let n_char = normalized.len();
     let char_range = range.to_range(n_char)?;
-    Ok(char_to_bytes(normalized.get(), char_range)
-        .map(|bytes_range| {
+    Ok(
+        char_to_bytes(normalized.get(), char_range).and_then(|bytes_range| {
             normalized
                 .slice(Range::Normalized(bytes_range))
                 .map(|n| n.into())
-        })
-        .flatten())
+        }),
+    )
 }
 
 /// NormalizedString
@@ -559,7 +559,7 @@ impl PyNormalizedStringRefMut {
 
     fn filter(&mut self, func: &PyAny) -> PyResult<()> {
         self.inner
-            .map_mut(|mut n| filter(&mut n, func))
+            .map_mut(|n| filter(n, func))
             .ok_or_else(PyNormalizedStringRefMut::destroyed_error)??;
         Ok(())
     }
@@ -573,7 +573,7 @@ impl PyNormalizedStringRefMut {
 
     fn map(&mut self, func: &PyAny) -> PyResult<()> {
         self.inner
-            .map_mut(|mut n| map(&mut n, func))
+            .map_mut(|n| map(n, func))
             .ok_or_else(PyNormalizedStringRefMut::destroyed_error)??;
         Ok(())
     }

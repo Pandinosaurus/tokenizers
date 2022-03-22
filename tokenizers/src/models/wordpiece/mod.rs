@@ -6,7 +6,6 @@ use crate::tokenizer::{Model, Result, Token};
 use std::{
     borrow::Cow,
     collections::HashMap,
-    fmt,
     fs::File,
     io::prelude::*,
     io::{BufRead, BufReader},
@@ -17,21 +16,10 @@ mod serialization;
 mod trainer;
 pub use trainer::*;
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("WordPiece error: Missing [UNK] token from the vocabulary")]
     MissingUnkToken,
-}
-impl std::error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::MissingUnkToken => write!(
-                fmt,
-                "WordPiece error: Missing [UNK] token from the vocabulary"
-            ),
-        }
-    }
 }
 
 type Vocab = HashMap<String, u32>;
@@ -71,30 +59,35 @@ impl WordPieceBuilder {
     }
 
     /// Set the input files.
+    #[must_use]
     pub fn files(mut self, vocab: String) -> Self {
         self.config.files = Some(vocab);
         self
     }
 
     /// Set the vocab (token -> ID) mapping.
+    #[must_use]
     pub fn vocab(mut self, vocab: Vocab) -> Self {
         self.config.vocab = vocab;
         self
     }
 
     /// The the `UNK` token for the vocab.
+    #[must_use]
     pub fn unk_token(mut self, unk_token: String) -> Self {
         self.config.unk_token = unk_token;
         self
     }
 
     /// Set the prefix for continuing subwords.
+    #[must_use]
     pub fn continuing_subword_prefix(mut self, continuing_subword_prefix: String) -> Self {
         self.config.continuing_subword_prefix = continuing_subword_prefix;
         self
     }
 
     /// Set the maximum number of input characters per word.
+    #[must_use]
     pub fn max_input_chars_per_word(mut self, max_input_chars_per_word: usize) -> Self {
         self.config.max_input_chars_per_word = max_input_chars_per_word;
         self

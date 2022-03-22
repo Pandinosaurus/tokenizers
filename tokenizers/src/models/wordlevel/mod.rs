@@ -2,7 +2,6 @@ use super::OrderedVocabIter;
 use crate::tokenizer::{Model, Result, Token};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -15,23 +14,12 @@ pub use trainer::*;
 
 type Vocab = HashMap<String, u32>;
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("WordLevel error: Missing [UNK] token from the vocabulary")]
     MissingUnkToken,
+    #[error("Bad vocabulary json file")]
     BadVocabulary,
-}
-impl std::error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::MissingUnkToken => write!(
-                fmt,
-                "WordLevel error: Missing [UNK] token from the vocabulary"
-            ),
-            Error::BadVocabulary => write!(fmt, "Bad vocabulary json file"),
-        }
-    }
 }
 
 struct Config {
@@ -65,18 +53,21 @@ impl WordLevelBuilder {
     }
 
     /// Set the input files.
+    #[must_use]
     pub fn files(mut self, vocab: String) -> Self {
         self.config.files = Some(vocab);
         self
     }
 
     /// Set the vocab (token -> ID) mapping.
+    #[must_use]
     pub fn vocab(mut self, vocab: HashMap<String, u32>) -> Self {
         self.config.vocab = vocab;
         self
     }
 
     /// The the `UNK` token for the vocab.
+    #[must_use]
     pub fn unk_token(mut self, unk_token: String) -> Self {
         self.config.unk_token = unk_token;
         self
@@ -168,15 +159,21 @@ impl Model for WordLevel {
     type Trainer = WordLevelTrainer;
 
     fn tokenize(&self, token: &str) -> Result<Vec<Token>> {
-        Ok(vec![Token {
-            id: *self
-                .vocab
-                .get(&*token)
-                .or_else(|| self.vocab.get(&*self.unk_token))
-                .ok_or(Error::MissingUnkToken)?,
-            value: token.to_owned(),
-            offsets: (0, token.len()),
-        }])
+        if let Some(&id) = self.vocab.get(token) {
+            Ok(vec![Token {
+                id,
+                value: token.to_owned(),
+                offsets: (0, token.len()),
+            }])
+        } else if let Some(&unk_id) = self.vocab.get(&self.unk_token) {
+            Ok(vec![Token {
+                id: unk_id,
+                value: self.unk_token.to_owned(),
+                offsets: (0, token.len()),
+            }])
+        } else {
+            Err(Box::new(Error::MissingUnkToken))
+        }
     }
 
     fn token_to_id(&self, token: &str) -> Option<u32> {
@@ -215,5 +212,39 @@ impl Model for WordLevel {
 
     fn get_trainer(&self) -> Self::Trainer {
         WordLevelTrainer::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tokenize_unk() {
+        let vocab: Vocab = [("<unk>".into(), 0), ("a".into(), 1), ("b".into(), 2)]
+            .iter()
+            .cloned()
+            .collect();
+        let wordlevel = WordLevelBuilder::default()
+            .vocab(vocab)
+            .unk_token("<unk>".to_string())
+            .build()
+            .unwrap();
+        let tokens = wordlevel.tokenize("c").unwrap();
+        assert_eq!(tokens, vec![Token::new(0u32, "<unk>".into(), (0, 1)),]);
+
+        let tokens = wordlevel.tokenize("a").unwrap();
+        assert_eq!(tokens, vec![Token::new(1u32, "a".into(), (0, 1)),]);
+    }
+
+    #[test]
+    fn test_tokenize_missing_unk_token() {
+        let vocab: Vocab = [("a".into(), 0), ("b".into(), 1)].iter().cloned().collect();
+        let wordlevel = WordLevelBuilder::default().vocab(vocab).build().unwrap();
+        let tokens = wordlevel.tokenize("a").unwrap();
+        assert_eq!(tokens, vec![Token::new(0u32, "a".into(), (0, 1)),]);
+
+        let error = wordlevel.tokenize("c").err().unwrap();
+        assert!(error.is::<Error>());
     }
 }

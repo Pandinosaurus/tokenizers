@@ -26,16 +26,20 @@ impl Default for RobertaProcessing {
 
 impl RobertaProcessing {
     pub fn new(sep: (String, u32), cls: (String, u32)) -> Self {
-        RobertaProcessing {
+        Self {
             sep,
             cls,
             ..Default::default()
         }
     }
+
+    #[must_use]
     pub fn trim_offsets(mut self, v: bool) -> Self {
         self.trim_offsets = v;
         self
     }
+
+    #[must_use]
     pub fn add_prefix_space(mut self, v: bool) -> Self {
         self.add_prefix_space = v;
         self
@@ -62,14 +66,14 @@ impl PostProcessor for RobertaProcessing {
             encoding
                 .get_overflowing_mut()
                 .iter_mut()
-                .for_each(|mut encoding| process_offsets(&mut encoding, self.add_prefix_space));
+                .for_each(|encoding| process_offsets(encoding, self.add_prefix_space));
 
-            if let Some(mut encoding) = pair_encoding.as_mut() {
-                process_offsets(&mut encoding, self.add_prefix_space);
+            if let Some(encoding) = pair_encoding.as_mut() {
+                process_offsets(encoding, self.add_prefix_space);
                 encoding
                     .get_overflowing_mut()
                     .iter_mut()
-                    .for_each(|mut encoding| process_offsets(&mut encoding, self.add_prefix_space));
+                    .for_each(|encoding| process_offsets(encoding, self.add_prefix_space));
             }
         }
 
